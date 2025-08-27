@@ -97,8 +97,12 @@ namespace Antmicro.Renode.Peripherals.I2C
 
         private void CreateRegisters()
         {
-            var control1 = new DoubleWordRegister(this).WithFlag(15, writeCallback: SoftwareResetWrite, name:"SWRST").WithFlag(9, FieldMode.Read, name:"StopGen", writeCallback: StopWrite)
-                .WithFlag(8, FieldMode.Read, writeCallback: StartWrite, name:"StartGen").WithFlag(0, writeCallback: PeripheralEnableWrite, name:"PeriEn");
+            var control1 = new DoubleWordRegister(this)
+                .WithFlag(15, writeCallback: SoftwareResetWrite, name:"SWRST")
+                .WithFlag(11, name:"POS", writeCallback: SetPOS)
+                .WithFlag(9, FieldMode.Read, name:"StopGen", writeCallback: StopWrite)
+                .WithFlag(8, FieldMode.Read, writeCallback: StartWrite, name:"StartGen")
+                .WithFlag(0, writeCallback: PeripheralEnableWrite, name:"PeriEn");
             var control2 = new DoubleWordRegister(this).WithValueField(0, 6, name:"Freq");
             var status1 = new DoubleWordRegister(this);
             var status2 = new DoubleWordRegister(this);
@@ -272,9 +276,12 @@ namespace Antmicro.Renode.Peripherals.I2C
                 dataToTransfer.Clear();
             }
             //TODO: TRA cleared on repeated Start condition. Is this always here?
-            transmitterReceiver.Value = false;
-            dataRegisterEmpty.Value = false;
-            byteTransferFinished.Value = false;
+            if(!is2ByteMode)
+            {
+                transmitterReceiver.Value = false;
+                dataRegisterEmpty.Value = false;
+                byteTransferFinished.Value = false;
+            }
             startBit.Value = true;
             if(newValue)
             {
@@ -303,6 +310,26 @@ namespace Antmicro.Renode.Peripherals.I2C
                 Update();
             }
         }
+        
+        private void SetPOS(bool oldValue, bool newValue)
+        {
+            // for 2-byte reception
+            if(newValue)
+            {
+                is2ByteMode = true;
+                this.NoisyLog("Now in 2-byte reception mode");
+                if(dataRegisterNotEmpty.Value && dataToReceive.Any())
+                {
+                    byteTransferFinished.Value = true;
+                    this.NoisyLog("Waiting for Data Read");
+                }
+            }
+            else
+            {
+                is2ByteMode = false;
+                this.NoisyLog("2-byte reception mode off");
+            }
+        }
 
         private DoubleWordRegister data;
         private IFlagRegisterField acknowledgeEnable;
@@ -318,6 +345,7 @@ namespace Antmicro.Renode.Peripherals.I2C
         private Queue<byte> dataToReceive;
         private bool willReadOnSelectedSlave;
         private II2CPeripheral selectedSlave;
+        private bool is2ByteMode;
 
         private enum Registers
         {

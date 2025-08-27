@@ -92,8 +92,13 @@ namespace Antmicro.Renode.Peripherals.I2C
                 return;
             }
             this.NoisyLog("Write {0}", data.Select(x => x.ToString("X")).Aggregate((x, y) => x + " " + y));
-            // First byte sets the device state
+            // First byte is NOT the device state, just the address
             state = data[0];
+            if(data.Length == 2)
+            {
+                // Sending only register for read operation
+                state = (byte)(data[0] | 1);
+            }
             this.Log(LogLevel.Noisy, "State changed to {0}", (States)state);
             // Second byte is always register address
             registerAddress = data[1];
@@ -823,8 +828,8 @@ namespace Antmicro.Renode.Peripherals.I2C
         private enum States
         {
             Idle = 0x0,
-            ReceivingData = 0xFD,
-            SendingData = 0xFC,
+            ReceivingData = 0xFD, // should be device slave address shifted left by 1 bit
+            SendingData = 0xFC, // should be ReceivingData increased by 1
         }
 
         private enum Registers
